@@ -1,11 +1,8 @@
+import os
+import json
 from flask import Flask, request, jsonify, send_file
 from flask_cors import CORS
 import yt_dlp
-import os
-from dotenv import load_dotenv  # Para cargar variables de entorno, si lo necesitas localmente
-
-# Cargar las variables de entorno
-load_dotenv()
 
 app = Flask(__name__)
 CORS(app)
@@ -24,17 +21,14 @@ def convert():
         return jsonify({'error': 'Missing URL or format'}), 400
 
     try:
-        # Acceder a las variables de entorno de Render
-        cookies_data = os.getenv('YOUTUBE_COOKIES')  # Obtener las cookies como texto
-        user_agent = os.getenv('USER_AGENT')  # Obtener el User-Agent
-
-        if not cookies_data or not user_agent:
-            return jsonify({'error': 'Missing cookies or user-agent in environment variables'}), 400
-
-        # Guardar las cookies en un archivo temporal
-        cookies_file = 'cookies.txt'
-        with open(cookies_file, 'w') as f:
-            f.write(cookies_data)
+        # Acceder a las cookies desde la variable de entorno YOUTUBE_COOKIES
+        cookies_json = os.getenv('YOUTUBE_COOKIES')
+        
+        # Si las cookies existen, las cargamos
+        if cookies_json:
+            cookies = json.loads(cookies_json)
+        else:
+            cookies = []
 
         # Configurar las opciones de yt-dlp
         ydl_opts = {
@@ -45,10 +39,7 @@ def convert():
                 'preferredcodec': 'mp3',
                 'preferredquality': '192',
             }] if format == 'mp3' else None,
-            'cookiefile': cookies_file,  # Usar el archivo de cookies
-            'headers': {
-                'User-Agent': user_agent  # Usar el User-Agent configurado
-            }
+            'cookiejar': cookies,  # Usar las cookies desde la variable de entorno
         }
 
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
@@ -57,9 +48,6 @@ def convert():
             if format == 'mp3':
                 filename = f"{os.path.splitext(filename)[0]}.mp3"
 
-        # Eliminar el archivo de cookies temporal después de su uso
-        os.remove(cookies_file)
-
         return send_file(filename, as_attachment=True)
 
     except Exception as e:
@@ -67,3 +55,4 @@ def convert():
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000)
+
