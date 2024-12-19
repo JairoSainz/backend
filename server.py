@@ -2,6 +2,10 @@ from flask import Flask, request, jsonify, send_file
 from flask_cors import CORS
 import yt_dlp
 import os
+from dotenv import load_dotenv
+
+# Cargar las variables de entorno
+load_dotenv()
 
 app = Flask(__name__)
 CORS(app)
@@ -20,9 +24,12 @@ def convert():
         return jsonify({'error': 'Missing URL or format'}), 400
 
     try:
-        # Acceder a las variables de entorno de Render
-        cookies_file = os.getenv('YOUTUBE_COOKIES')  # Ruta al archivo de cookies
-        user_agent = os.getenv('USER_AGENT')  # User-Agent para el request
+        # Obtener las variables de entorno para cookies y user-agent
+        cookies = os.getenv('YOUTUBE_COOKIES')  # Obtener las cookies desde las variables de entorno
+        user_agent = os.getenv('USER_AGENT')
+
+        if not cookies or not user_agent:
+            return jsonify({'error': 'Faltan las variables de entorno YOUTUBE_COOKIES o USER_AGENT'}), 500
 
         # Configurar las opciones de yt-dlp
         ydl_opts = {
@@ -33,9 +40,9 @@ def convert():
                 'preferredcodec': 'mp3',
                 'preferredquality': '192',
             }] if format == 'mp3' else None,
-            'cookiefile': cookies_file,  # Usar el archivo de cookies configurado en Render
+            'cookies': cookies,  # Pasar las cookies directamente
             'headers': {
-                'User-Agent': user_agent  # Usar el User-Agent configurado en Render
+                'User-Agent': user_agent  # Usar User-Agent configurado en Render
             }
         }
 
@@ -45,10 +52,14 @@ def convert():
             if format == 'mp3':
                 filename = f"{os.path.splitext(filename)[0]}.mp3"
 
-        return send_file(filename, as_attachment=True)
+        # Verificar si el archivo existe
+        if os.path.exists(filename):
+            return send_file(filename, as_attachment=True)
+        else:
+            return jsonify({'error': 'El archivo no se pudo generar.'}), 500
 
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return jsonify({'error': f'Ocurrió un error: {str(e)}'}), 500
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000)
