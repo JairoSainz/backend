@@ -4,21 +4,14 @@ import yt_dlp
 import os
 
 app = Flask(__name__)
+CORS(app)
 
-# Permitir todas las solicitudes de cualquier origen
-CORS(app, resources={r"/*": {"origins": "*"}}, allow_headers=["Content-Type"])
-
-# Directorio donde se almacenarán los archivos descargados
 DOWNLOAD_DIR = "downloads"
 if not os.path.exists(DOWNLOAD_DIR):
     os.makedirs(DOWNLOAD_DIR)
 
-@app.route('/convert', methods=['POST', 'OPTIONS'])
+@app.route('/convert', methods=['POST'])
 def convert():
-    # Manejo de solicitudes OPTIONS (preflight)
-    if request.method == 'OPTIONS':
-        return '', 200
-
     data = request.json
     url = data.get('url')
     format = data.get('format')
@@ -27,7 +20,11 @@ def convert():
         return jsonify({'error': 'Missing URL or format'}), 400
 
     try:
-        # Definimos las opciones para yt-dlp según el formato solicitado
+        # Acceder a las variables de entorno de Render
+        cookies_file = os.getenv('YOUTUBE_COOKIES')  # Ruta al archivo de cookies
+        user_agent = os.getenv('USER_AGENT')  # User-Agent para el request
+
+        # Configurar las opciones de yt-dlp
         ydl_opts = {
             'outtmpl': f'{DOWNLOAD_DIR}/%(title)s.%(ext)s',
             'format': 'bestaudio/best' if format == 'mp3' else 'best',
@@ -35,17 +32,19 @@ def convert():
                 'key': 'FFmpegExtractAudio',
                 'preferredcodec': 'mp3',
                 'preferredquality': '192',
-            }] if format == 'mp3' else None
+            }] if format == 'mp3' else None,
+            'cookiefile': cookies_file,  # Usar el archivo de cookies configurado en Render
+            'headers': {
+                'User-Agent': user_agent  # Usar el User-Agent configurado en Render
+            }
         }
 
-        # Ejecutamos yt-dlp para descargar el video
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             info = ydl.extract_info(url, download=True)
             filename = ydl.prepare_filename(info)
             if format == 'mp3':
                 filename = f"{os.path.splitext(filename)[0]}.mp3"
-        
-        # Enviamos el archivo descargado como respuesta
+
         return send_file(filename, as_attachment=True)
 
     except Exception as e:
